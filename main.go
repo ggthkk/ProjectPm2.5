@@ -100,6 +100,8 @@ func interpretWeatherIcon(ic string) string {
 
 func escape(s string) string {
 	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "\n", "\\n")
 	return s
 }
 
@@ -112,20 +114,39 @@ func sendToDiscordEmbed(title, description string, color int) {
 
 	payload := fmt.Sprintf(`{
 		"embeds": [
-			{
-				"title": "%s",
-				"description": "%s",
-				"color": %d
-			}
+		  {
+			"title": "%s",
+			"description": "%s",
+			"color": %d
+		  }
 		]
-	}`, escape(title), escape(description), color)
+	  }`, escape(title), escape(description), color)
 
 	resp, err := http.Post(webhookURL, "application/json", strings.NewReader(payload))
 	if err != nil {
 		fmt.Println("❌ Failed to send to Discord:", err)
+		notifyDiscordError("HTTP Error", err.Error())
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 204 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		errorMsg := fmt.Sprintf("Code: %d\nBody: %s", resp.StatusCode, string(body))
+		fmt.Println("❌ Discord response:", errorMsg)
+		notifyDiscordError("Discord Error", errorMsg)
+	}
+}
+
+// ✅ ฟังก์ชันแจ้ง error กลับไป Discord แบบ plain text (กัน embed พังซ้ำ)
+func notifyDiscordError(title string, message string) {
+	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	if webhookURL == "" {
+		return
+	}
+
+	payload := fmt.Sprintf("{\"content\": \"🚨 **%s**\\n```\n%s\n```\"}", escape(title), escape(message))
+	_, _ = http.Post(webhookURL, "application/json", strings.NewReader(payload))
 }
 
 func main() {
@@ -200,7 +221,12 @@ func main() {
 		fmt.Println("----------------------------------------------------")
 
 		description := fmt.Sprintf(
-			"🔴 AQI: %d\n🫁 %s\n🌡 %d°C 💧 %d%% 💨 %.1fm/s ทิศ %d°\n🌤 %s",
+			"🔴 AQI (US): %d\n"+
+				"🫁 สรุป: %s\n"+
+				"🌡 อุณหภูมิ: %d°C\n"+
+				"💧 ความชื้น: %d%%\n"+
+				"💨 ลม: %.1f m/s ทิศ %d°\n"+
+				"🌤 สภาพอากาศ: %s",
 			aqi,
 			interpretAQI(aqi, mainPollutant),
 			weather.Tp, weather.Hu, weather.Ws, weather.Wd,
