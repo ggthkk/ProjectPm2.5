@@ -1,0 +1,28 @@
+name: Air Quality Bot
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # รัน 9 โมงเช้าไทย (UTC+7)
+  workflow_dispatch: # เผื่ออยากกดรันเองจาก GitHub
+
+jobs:
+  daily-aqi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🛠 Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: 📦 Load secrets/vars into .env
+        run: |
+          echo "API_KEY=${{ secrets.API_KEY }}" >> .env
+          echo "DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_WEBHOOK_URL }}" >> .env
+          echo "map=${{ vars.MAP }}" >> .env
+
+      - name: 🚀 Run air quality bot
+        run: go run main.go
