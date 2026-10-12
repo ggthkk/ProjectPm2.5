@@ -119,7 +119,7 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 	if err != nil {
 		return Embed{}, err
 	}
-	var lines []string
+	e := Embed{Title: "🌤 อากาศและคุณภาพอากาศ", Description: "ค่าปัจจุบันจาก IQAir · ไม่ใช่พยากรณ์ฝน", URL: "https://www.iqair.com/", Color: 0x56B4E9}
 	seen := map[string]bool{}
 	for i, p := range locations {
 		q := url.Values{"lat": {strconv.FormatFloat(p.Lat, 'f', 6, 64)}, "lon": {strconv.FormatFloat(p.Lon, 'f', 6, 64)}, "key": {c.APIKey}}
@@ -129,7 +129,7 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 			r, err = decodeAir(data, now)
 		}
 		if err != nil {
-			lines = append(lines, fmt.Sprintf("พื้นที่ %d: ข้อมูลไม่พร้อม", i+1))
+			e.Fields = append(e.Fields, EmbedField{Name: fmt.Sprintf("พื้นที่ %d", i+1), Value: "ข้อมูลไม่พร้อม"})
 			continue
 		}
 		city := r.Data.City + ", " + r.Data.State
@@ -139,12 +139,14 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 		seen[city] = true
 		p := r.Data.Current.Pollution
 		w := r.Data.Current.Weather
-		line := fmt.Sprintf("**%s**\nAQI US **%d · %s**", safeText(city), *p.AQIUS, interpretAQI(*p.AQIUS))
+		weather := ""
 		if w.Tp != nil && fresh(w.TS, now, 6*time.Hour) {
-			line += fmt.Sprintf(" · %d°C · %s", *w.Tp, interpretWeatherIcon(w.Ic))
+			weather = fmt.Sprintf("\n🌡 **%d°C** · %s", *w.Tp, interpretWeatherIcon(w.Ic))
 		}
-		line += "\nตรวจวัด " + p.TS.In(c.Location).Format("02/01 15:04") + " น."
-		lines = append(lines, line)
+		field := airField(city, *p.AQIUS, weather, p.TS, c.Location)
+		field.Name = short(field.Name, 50)
+		field.Value = short(field.Value, 1400/len(locations)-len([]rune(field.Name)))
+		e.Fields = append(e.Fields, field)
 	}
-	return Embed{Title: "🌤 อากาศและคุณภาพอากาศ", Description: short(strings.Join(lines, "\n\n")+"\n\nแหล่งข้อมูล: IQAir · ค่าปัจจุบัน ไม่ใช่พยากรณ์ฝน", 1400), URL: "https://www.iqair.com/", Color: 0x56B4E9}, nil
+	return e, nil
 }

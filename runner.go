@@ -111,6 +111,9 @@ func (a *App) check(ctx context.Context) error {
 			s.Errors = append(s.Errors, err)
 		} else {
 			log.Print(e.Description)
+			for _, f := range e.Fields {
+				log.Printf("%s: %s", f.Name, f.Value)
+			}
 		}
 	}
 	for _, rows := range [][]Item{s.Valorant, s.Games} {
@@ -161,26 +164,25 @@ func (a *App) items(kind string, rows []Item, limit int, now time.Time, age time
 	return out, keys
 }
 func itemEmbed(title string, items []Item, color, budget int) Embed {
-	var lines []string
-	for _, i := range items {
-		line := "[" + short(safeText(i.Title), 100) + "](" + i.URL + ")"
-		if i.Summary != "" {
-			remaining := budget/len(items) - len([]rune(line)) - len([]rune(i.Source)) - 6
-			if remaining > 20 {
-				line += "\n" + short(safeText(i.Summary), min(160, remaining))
-			}
+	e := Embed{Title: title, Color: color}
+	for n, i := range items {
+		name := fmt.Sprintf("%d. %s", n+1, short(safeText(i.Title), 100))
+		link := "[อ่านต่อ ↗](" + i.URL + ") · " + short(safeText(i.Source), 60)
+		remaining := min(1024, budget/len(items)-len([]rune(name))) - len([]rune(link)) - 1
+		value := link
+		if i.Summary != "" && remaining > 20 {
+			value = short(safeText(i.Summary), min(100, remaining)) + "\n" + link
 		}
-		line += "\n" + safeText(i.Source)
-		lines = append(lines, line)
+		e.Fields = append(e.Fields, EmbedField{Name: name, Value: value})
 	}
-	return Embed{Title: title, Description: strings.Join(lines, "\n\n"), Color: color}
+	return e
 }
 func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 	c := a.cfg
 	day := now.In(c.Location).Format("2006-01-02")
 	groups := map[string]*Plan{}
 	add := func(hook string, e Embed, keys []string) {
-		if e.Description == "" {
+		if e.Description == "" && len(e.Fields) == 0 {
 			return
 		}
 		p := groups[hook]
@@ -221,19 +223,20 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 		}
 	}
 	if c.Water {
-		var items []Item
+		var stations []WaterRow
 		for _, r := range s.Water {
 			if waterLevel(r) >= 3 {
-				items = append(items, waterItem(r))
+				stations = append(stations, r)
 			}
-			if len(items) == 3 {
+			if len(stations) == 3 {
 				break
 			}
 		}
-		if len(items) > 0 {
-			e := itemEmbed("🌊 สถานีเฝ้าระวังน้ำในพื้นที่ที่เลือก", items, 0xFEE75C, 800)
-			e.Description += "\n\nสถานะสถานีไม่ใช่การยืนยันน้ำท่วมถนนหรือบ้าน · พื้นที่: " + strings.Join(c.Provinces, ", ")
+		if len(stations) > 0 {
+			e := waterEmbed("🌊 สรุประดับน้ำในพื้นที่", stations, nil, c)
 			add(c.AlertsWebhook, e, nil)
+			p := groups[c.AlertsWebhook]
+			p.Ack = func() { a.ackWater(stations, now) }
 		}
 	}
 	var plans []Plan
@@ -263,6 +266,10 @@ func (a *App) alerts(s Snapshot, now time.Time) []Plan {
 		id := strconv.Itoa(r.Station.ID)
 		level := waterLevel(r)
 		old, known := a.state.Water[id]
+		if !known {
+			a.state.Water[id] = level
+			continue
+		}
 		if level < 3 {
 			a.state.Water[id] = level
 			continue
@@ -284,14 +291,9 @@ func (a *App) alerts(s Snapshot, now time.Time) []Plan {
 		for _, i := range waterItems {
 			ids = append(ids, i.ID)
 		}
-		e := itemEmbed("🌊 สถานะสถานีระดับน้ำเปลี่ยน", waterItems, 0xFEE75C, 1500)
-		e.Description += "\n\nเป็นสถานะ ณ สถานีตรวจวัด ไม่ใช่การยืนยันน้ำท่วมถนนหรือบ้าน"
+		e := waterEmbed("🌊 สถานะน้ำรุนแรงขึ้น", selected, a.state.Water, c)
 		plans = append(plans, Plan{Hook: c.AlertsWebhook, ID: "water:" + now.In(c.Location).Format("2006-01-02") + ":" + hash(strings.Join(ids, "|")), Embeds: []Embed{e}, Alert: true, Ack: func() {
-			for _, r := range selected {
-				id := strconv.Itoa(r.Station.ID)
-				a.state.Water[id] = waterLevel(r)
-				a.state.WaterNotified[id] = now
-			}
+			a.ackWater(selected, now)
 		}})
 	}
 	if s.Good["riot"] {

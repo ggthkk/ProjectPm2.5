@@ -12,10 +12,16 @@ import (
 )
 
 type Embed struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	URL         string `json:"url,omitempty"`
-	Color       int    `json:"color"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	URL         string       `json:"url,omitempty"`
+	Color       int          `json:"color"`
+	Fields      []EmbedField `json:"fields,omitempty"`
+}
+type EmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
 }
 type Payload struct {
 	Embeds          []Embed `json:"embeds"`
@@ -63,6 +69,15 @@ func send(ctx context.Context, client *http.Client, hook string, embeds []Embed)
 	}
 	for _, e := range embeds {
 		total += len([]rune(e.Title)) + len([]rune(e.Description))
+		if len(e.Fields) > 25 {
+			return "", false, fmt.Errorf("too many embed fields")
+		}
+		for _, f := range e.Fields {
+			if strings.TrimSpace(f.Name) == "" || strings.TrimSpace(f.Value) == "" || len([]rune(f.Name)) > 256 || len([]rune(f.Value)) > 1024 {
+				return "", false, fmt.Errorf("invalid embed field")
+			}
+			total += len([]rune(f.Name)) + len([]rune(f.Value))
+		}
 		if len([]rune(e.Title)) > 256 || len([]rune(e.Description)) > 4096 {
 			return "", false, fmt.Errorf("embed exceeds Discord limits")
 		}
