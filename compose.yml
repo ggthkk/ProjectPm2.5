@@ -1,0 +1,52 @@
+services:
+  discord-digest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: projectpm25-discord-digest:local
+    pull_policy: build
+    restart: unless-stopped
+    environment:
+      API_KEY: ${API_KEY:?Set the existing IQAir API key}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?Set the existing Discord webhook}
+      MAP: ${MAP:?Set latitude,longitude pairs separated by semicolons}
+      DISCORD_WEATHER_WEBHOOK_URL: ${DISCORD_WEATHER_WEBHOOK_URL:-}
+      DISCORD_GAMES_WEBHOOK_URL: ${DISCORD_GAMES_WEBHOOK_URL:-}
+      DISCORD_NEWS_WEBHOOK_URL: ${DISCORD_NEWS_WEBHOOK_URL:-}
+      DISCORD_ALERTS_WEBHOOK_URL: ${DISCORD_ALERTS_WEBHOOK_URL:-}
+      TZ: Asia/Bangkok
+      DATA_DIR: /data
+      DIGEST_TIME: ${DIGEST_TIME:-09:00}
+      POLL_INTERVAL: ${POLL_INTERVAL:-30m}
+      QUIET_START: ${QUIET_START:-23}
+      QUIET_END: ${QUIET_END:-8}
+      MAX_ALERTS_PER_DAY: ${MAX_ALERTS_PER_DAY:-3}
+      WATER_PROVINCES: ${WATER_PROVINCES:-10,12,13}
+      ALERT_AREAS: ${ALERT_AREAS:-กรุงเทพ,นนทบุรี,ปทุมธานี,Bangkok,Nonthaburi,Pathum Thani}
+      GAME_PLATFORMS: ${GAME_PLATFORMS:-Steam,Epic Games Store,GOG}
+      ENABLE_AIR: ${ENABLE_AIR:-true}
+      ENABLE_VALORANT: ${ENABLE_VALORANT:-true}
+      ENABLE_GAMES: ${ENABLE_GAMES:-true}
+      ENABLE_NEWS: ${ENABLE_NEWS:-true}
+      ENABLE_WATER: ${ENABLE_WATER:-true}
+      ENABLE_DISASTERS: ${ENABLE_DISASTERS:-true}
+      ENABLE_RIOT_STATUS: ${ENABLE_RIOT_STATUS:-true}
+    volumes:
+      - digest-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  digest-data:

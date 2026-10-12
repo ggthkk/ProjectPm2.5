@@ -1,0 +1,9 @@
+.git
+.github
+.env
+.env.*
+data
+.scratch
+.gocache
+*.exe
+discord-digest
