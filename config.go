@@ -13,6 +13,7 @@ type Config struct {
 	APIKey, Locations, DataDir, Zone, DigestTime                           string
 	Webhook, WeatherWebhook, GamesWebhook, NewsWebhook, AlertsWebhook      string
 	Poll                                                                   time.Duration
+	WaterRadiusKM                                                          float64
 	QuietStart, QuietEnd, MaxAlerts                                        int
 	Provinces, AreaKeywords, NewsFeeds, Platforms                          []string
 	Air, Valorant, Games, News, Water, Disasters, Riot                     bool
@@ -41,6 +42,10 @@ func loadConfig() (Config, error) {
 		NewsFeeds: list(env("NEWS_FEEDS", "https://www.bangkokpost.com/rss/data/topstories.xml,https://www.blognone.com/atom.xml")), Platforms: list(env("GAME_PLATFORMS", "Steam,Epic Games Store,GOG")),
 		AirURL: "https://api.airvisual.com/v2/nearest_city", ValorantURL: "https://playvalorant.com/th-th/news/", GamesURL: "https://www.gamerpower.com/api/giveaways?type=game", WaterURL: "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load", GDACSURL: "https://www.gdacs.org/xml/rss.xml", WarningURL: "https://www.tmd.go.th/api/xml/warning-news", RiotURL: "https://valorant.secure.dyn.riotcdn.net/channels/public/x/status/ap.json"}
 	var err error
+	c.WaterRadiusKM, err = strconv.ParseFloat(env("WATER_RADIUS_KM", "10"), 64)
+	if err != nil || !(c.WaterRadiusKM > 0 && c.WaterRadiusKM <= 200) {
+		return c, fmt.Errorf("WATER_RADIUS_KM must be between 0 and 200 km")
+	}
 	c.Location, err = time.LoadLocation(c.Zone)
 	if err != nil {
 		return c, fmt.Errorf("invalid TZ")
@@ -80,7 +85,7 @@ func loadConfig() (Config, error) {
 			return c, fmt.Errorf("webhooks must use Discord HTTPS /api/webhooks URLs")
 		}
 	}
-	if c.Air && c.Locations != "" {
+	if (c.Air || c.Water) && c.Locations != "" {
 		if _, err := parseLocations(c.Locations); err != nil {
 			return c, err
 		}

@@ -26,6 +26,9 @@ func waterEmbed(title string, rows []WaterRow, previous map[string]int, c Config
 		areas = append(areas, name)
 	}
 	e := Embed{Title: title, Color: 0xFEE75C, Description: "พื้นที่: " + strings.Join(areas, " · ")}
+	if c.Locations != "" {
+		e.Description = fmt.Sprintf("สถานีภายใน %.0f กม. รอบพิกัด MAP ที่ตั้งไว้", c.WaterRadiusKM)
+	}
 	for _, r := range rows {
 		level := waterLevel(r)
 		status := waterBadge(level)
@@ -33,6 +36,9 @@ func waterEmbed(title string, rows []WaterRow, previous map[string]int, c Config
 			status = waterBadge(old) + " → " + status
 		}
 		value := "**" + status + "**"
+		if c.Locations != "" {
+			value += fmt.Sprintf(" · ห่าง %.1f กม.", r.DistanceKM)
+		}
 		if r.MSL != nil {
 			value += "\nระดับน้ำ **" + safeText(*r.MSL) + " ม.รทก.**"
 		}

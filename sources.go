@@ -273,12 +273,15 @@ func fetchGames(ctx context.Context, client *http.Client, c Config) ([]Item, err
 }
 
 type WaterRow struct {
-	Time    string  `json:"waterlevel_datetime"`
-	Level   *int    `json:"situation_level"`
-	MSL     *string `json:"waterlevel_msl"`
-	Diff    string  `json:"diff_wl_bank_text"`
-	Station struct {
-		ID   int `json:"id"`
+	DistanceKM float64 `json:"-"`
+	Time       string  `json:"waterlevel_datetime"`
+	Level      *int    `json:"situation_level"`
+	MSL        *string `json:"waterlevel_msl"`
+	Diff       string  `json:"diff_wl_bank_text"`
+	Station    struct {
+		Lat  *float64 `json:"tele_station_lat"`
+		Lon  *float64 `json:"tele_station_long"`
+		ID   int      `json:"id"`
 		Name struct {
 			TH string `json:"th"`
 		} `json:"tele_station_name"`
@@ -301,6 +304,14 @@ func waterLevel(r WaterRow) int {
 	return *r.Level
 }
 func fetchWater(ctx context.Context, client *http.Client, c Config, now time.Time) ([]WaterRow, error) {
+	var locations []Coordinates
+	if c.Locations != "" {
+		var err error
+		locations, err = parseLocations(c.Locations)
+		if err != nil {
+			return nil, err
+		}
+	}
 	data, e := get(ctx, client, c.WaterURL)
 	if e != nil {
 		return nil, e
@@ -321,6 +332,13 @@ func fetchWater(ctx context.Context, client *http.Client, c Config, now time.Tim
 				match = true
 			}
 		}
+		if len(locations) > 0 {
+			if r.Station.Lat == nil || r.Station.Lon == nil || !(*r.Station.Lat >= -90 && *r.Station.Lat <= 90 && *r.Station.Lon >= -180 && *r.Station.Lon <= 180) {
+				continue
+			}
+			r.DistanceKM = nearestDistanceKM(Coordinates{*r.Station.Lat, *r.Station.Lon}, locations)
+			match = r.DistanceKM <= c.WaterRadiusKM
+		}
 		if !match || r.MSL == nil {
 			continue
 		}
@@ -334,10 +352,15 @@ func fetchWater(ctx context.Context, client *http.Client, c Config, now time.Tim
 		}
 		out = append(out, r)
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && len(locations) == 0 {
 		return nil, fmt.Errorf("no fresh ThaiWater stations for selected provinces")
 	}
-	sort.Slice(out, func(i, j int) bool { return waterLevel(out[i]) > waterLevel(out[j]) })
+	sort.Slice(out, func(i, j int) bool {
+		if waterLevel(out[i]) == waterLevel(out[j]) {
+			return out[i].DistanceKM < out[j].DistanceKM
+		}
+		return waterLevel(out[i]) > waterLevel(out[j])
+	})
 	return out, nil
 }
 func waterItem(r WaterRow) Item {

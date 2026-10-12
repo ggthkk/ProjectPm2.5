@@ -40,9 +40,12 @@ func parseLocations(raw string) ([]Coordinates, error) {
 type AirQualityResponse struct {
 	Status string `json:"status"`
 	Data   struct {
-		City    string `json:"city"`
-		State   string `json:"state"`
-		Country string `json:"country"`
+		City     string `json:"city"`
+		State    string `json:"state"`
+		Country  string `json:"country"`
+		Location struct {
+			Coordinates []float64 `json:"coordinates"`
+		} `json:"location"`
 		Current struct {
 			Pollution struct {
 				AQIUS  *int      `json:"aqius"`
@@ -119,8 +122,7 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 	if err != nil {
 		return Embed{}, err
 	}
-	e := Embed{Title: "🌤 อากาศและคุณภาพอากาศ", Description: "ค่าปัจจุบันจาก IQAir · ไม่ใช่พยากรณ์ฝน", URL: "https://www.iqair.com/", Color: 0x56B4E9}
-	seen := map[string]bool{}
+	e := Embed{Title: "🌤 อากาศและคุณภาพอากาศ", Description: "IQAir: ข้อมูลเมืองใกล้พิกัด MAP · ไม่ใช่จุดตรวจวัดตรงบ้านหรือพยากรณ์ฝน", URL: "https://www.iqair.com/", Color: 0x56B4E9}
 	for i, p := range locations {
 		q := url.Values{"lat": {strconv.FormatFloat(p.Lat, 'f', 6, 64)}, "lon": {strconv.FormatFloat(p.Lon, 'f', 6, 64)}, "key": {c.APIKey}}
 		data, err := get(ctx, client, c.AirURL+"?"+q.Encode())
@@ -133,10 +135,6 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 			continue
 		}
 		city := r.Data.City + ", " + r.Data.State
-		if seen[city] {
-			continue
-		}
-		seen[city] = true
 		p := r.Data.Current.Pollution
 		w := r.Data.Current.Weather
 		weather := ""
@@ -144,7 +142,11 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 			weather = fmt.Sprintf("\n🌡 **%d°C** · %s", *w.Tp, interpretWeatherIcon(w.Ic))
 		}
 		field := airField(city, *p.AQIUS, weather, p.TS, c.Location)
-		field.Name = short(field.Name, 50)
+		field.Name = short(fmt.Sprintf("พื้นที่ %d · ข้อมูลเมือง %s", i+1, safeText(city)), 65)
+		coords := r.Data.Location.Coordinates
+		if len(coords) == 2 && coords[1] >= -90 && coords[1] <= 90 && coords[0] >= -180 && coords[0] <= 180 {
+			field.Value += fmt.Sprintf("\nตำแหน่งข้อมูลห่างพิกัด %.1f กม.", distanceKM(locations[i], Coordinates{coords[1], coords[0]}))
+		}
 		field.Value = short(field.Value, 1400/len(locations)-len([]rune(field.Name)))
 		e.Fields = append(e.Fields, field)
 	}

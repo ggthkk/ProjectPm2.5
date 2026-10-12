@@ -232,8 +232,15 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 				break
 			}
 		}
-		if len(stations) > 0 {
+		if s.Good["water"] || len(stations) > 0 {
 			e := waterEmbed("🌊 สรุประดับน้ำในพื้นที่", stations, nil, c)
+			if len(stations) == 0 {
+				message := "ไม่มีสถานีเข้าเกณฑ์เตือนภัยในข้อมูลล่าสุด"
+				if len(s.Water) == 0 {
+					message = "ไม่พบข้อมูลสถานีที่ใหม่พอในพื้นที่นี้ ไม่ได้หมายความว่าไม่มีน้ำท่วม"
+				}
+				e.Fields = append([]EmbedField{{Name: "ข้อมูลในพื้นที่ที่ตั้งไว้", Value: message}}, e.Fields...)
+			}
 			add(c.AlertsWebhook, e, nil)
 			p := groups[c.AlertsWebhook]
 			p.Ack = func() { a.ackWater(stations, now) }

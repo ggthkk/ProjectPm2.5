@@ -22,6 +22,7 @@ services:
       QUIET_END: ${QUIET_END:-8}
       MAX_ALERTS_PER_DAY: ${MAX_ALERTS_PER_DAY:-3}
       WATER_PROVINCES: ${WATER_PROVINCES:-10,12,13}
+      WATER_RADIUS_KM: ${WATER_RADIUS_KM:-10}
       ALERT_AREAS: ${ALERT_AREAS:-กรุงเทพ,นนทบุรี,ปทุมธานี,Bangkok,Nonthaburi,Pathum Thani}
       GAME_PLATFORMS: ${GAME_PLATFORMS:-Steam,Epic Games Store,GOG}
       ENABLE_AIR: ${ENABLE_AIR:-true}
