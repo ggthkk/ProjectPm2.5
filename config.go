@@ -39,7 +39,7 @@ func list(s string) []string {
 func loadConfig() (Config, error) {
 	c := Config{APIKey: env("API_KEY", ""), Locations: env("MAP", env("map", "")), DataDir: env("DATA_DIR", "data"), Zone: env("TZ", "Asia/Bangkok"), DigestTime: env("DIGEST_TIME", "09:00"), Webhook: env("DISCORD_WEBHOOK_URL", ""),
 		Provinces: list(env("WATER_PROVINCES", "10,12,13")), AreaKeywords: list(env("ALERT_AREAS", "กรุงเทพ,นนทบุรี,ปทุมธานี,Bangkok,Nonthaburi,Pathum Thani")),
-		NewsFeeds: list(env("NEWS_FEEDS", "https://www.bangkokpost.com/rss/data/topstories.xml,https://www.blognone.com/atom.xml")), Platforms: list(env("GAME_PLATFORMS", "Steam,Epic Games Store,GOG")),
+		NewsFeeds: list(env("NEWS_FEEDS", "https://sheapgamer.com/feed/,https://knowyourmeme.com/newsfeed.rss")), Platforms: list(env("GAME_PLATFORMS", "Steam,Epic Games Store,GOG")),
 		AirURL: "https://api.airvisual.com/v2/nearest_city", ValorantURL: "https://playvalorant.com/th-th/news/", GamesURL: "https://www.gamerpower.com/api/giveaways?type=game", WaterURL: "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load", GDACSURL: "https://www.gdacs.org/xml/rss.xml", WarningURL: "https://www.tmd.go.th/api/xml/warning-news", RiotURL: "https://valorant.secure.dyn.riotcdn.net/channels/public/x/status/ap.json"}
 	var err error
 	c.WaterRadiusKM, err = strconv.ParseFloat(env("WATER_RADIUS_KM", "10"), 64)

@@ -17,6 +17,10 @@ type Embed struct {
 	URL         string       `json:"url,omitempty"`
 	Color       int          `json:"color"`
 	Fields      []EmbedField `json:"fields,omitempty"`
+	Thumbnail   *EmbedMedia  `json:"thumbnail,omitempty"`
+}
+type EmbedMedia struct {
+	URL string `json:"url"`
 }
 type EmbedField struct {
 	Name   string `json:"name"`

@@ -122,7 +122,7 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 	if err != nil {
 		return Embed{}, err
 	}
-	e := Embed{Title: "🌤 อากาศและคุณภาพอากาศ", Description: "IQAir: ข้อมูลเมืองใกล้พิกัด MAP · ไม่ใช่จุดตรวจวัดตรงบ้านหรือพยากรณ์ฝน", URL: "https://www.iqair.com/", Color: 0x56B4E9}
+	e := Embed{Title: "☀️ วันนี้ใกล้คุณ · " + now.In(c.Location).Format("02/01"), Description: "ค่าตรวจวัดจากเมืองใกล้คุณ · IQAir", URL: "https://www.iqair.com/", Color: 0x56B4E9}
 	for i, p := range locations {
 		q := url.Values{"lat": {strconv.FormatFloat(p.Lat, 'f', 6, 64)}, "lon": {strconv.FormatFloat(p.Lon, 'f', 6, 64)}, "key": {c.APIKey}}
 		data, err := get(ctx, client, c.AirURL+"?"+q.Encode())
@@ -148,6 +148,27 @@ func fetchAir(ctx context.Context, client *http.Client, c Config, now time.Time)
 			field.Value += fmt.Sprintf("\nตำแหน่งข้อมูลห่างพิกัด %.1f กม.", distanceKM(locations[i], Coordinates{coords[1], coords[0]}))
 		}
 		field.Value = short(field.Value, 1400/len(locations)-len([]rune(field.Name)))
+		field.Inline = len(locations) > 1
+		if len(locations) == 1 && weather != "" {
+			field = airField(city, *p.AQIUS, "", p.TS, c.Location)
+			field.Name = "คุณภาพอากาศ · US AQI"
+			field.Inline = true
+			e.Description = "📍 " + safeText(city)
+			if len(coords) == 2 && coords[1] >= -90 && coords[1] <= 90 && coords[0] >= -180 && coords[0] <= 180 {
+				e.Description += fmt.Sprintf(" · ห่าง %.1f กม.", distanceKM(locations[i], Coordinates{coords[1], coords[0]}))
+			}
+			e.Description += "\nค่าจากเมืองใกล้คุณ ไม่ใช่จุดวัดตรงบ้าน"
+			e.Fields = append(e.Fields, field, EmbedField{Name: "สภาพอากาศ", Value: fmt.Sprintf("🌡 **%d°C**\n%s\nวัดเมื่อ %s น.", *w.Tp, interpretWeatherIcon(w.Ic), w.TS.In(c.Location).Format("02/01 15:04")), Inline: true})
+			colors := []int{0x57F287, 0xFEE75C, 0xE67E22, 0xED4245}
+			band := 0
+			for _, threshold := range []int{50, 100, 150} {
+				if *p.AQIUS > threshold {
+					band++
+				}
+			}
+			e.Color = colors[band]
+			continue
+		}
 		e.Fields = append(e.Fields, field)
 	}
 	return e, nil

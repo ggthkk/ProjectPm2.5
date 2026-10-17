@@ -145,16 +145,45 @@ func (a *App) items(kind string, rows []Item, limit int, now time.Time, age time
 	var out []Item
 	var keys []string
 	titleSeen := map[string]bool{}
+	urlSeen := map[string]bool{}
+	sources := map[string]int{}
+	if kind == "news" {
+		rows = rankedNews(rows, a.cfg.AreaKeywords)
+	}
+	if kind == "valorant" {
+		rows = append([]Item(nil), rows...)
+		sort.SliceStable(rows, func(i, j int) bool {
+			patch := func(r Item) bool {
+				return strings.Contains(strings.ToLower(r.Title), "patch notes") || strings.Contains(r.Title, "แพตช์โน้ต")
+			}
+			if patch(rows[i]) != patch(rows[j]) {
+				return patch(rows[i])
+			}
+			return rows[i].Published.After(rows[j].Published)
+		})
+	}
 	for _, i := range rows {
 		key := kind + ":" + i.ID
-		title := strings.ToLower(text(i.Title))
-		if !a.unseen(key) || titleSeen[title] || i.Title == "" {
+		title := storyKey(i.Title)
+		link := normalizedURL(i.URL)
+		if !a.unseen(key) || titleSeen[title] || urlSeen[link] || title == "" || safeURL(i.URL) == "" {
 			continue
 		}
 		if age > 0 && !fresh(i.Published, now, age) {
 			continue
 		}
+		if kind == "news" {
+			score, _ := newsTopic(i, a.cfg.AreaKeywords)
+			if score == 0 || strings.Contains(i.URL, "/opinion/") {
+				continue
+			}
+		}
+		if kind == "news" && sources[sourceLabel(i)] >= 2 {
+			continue
+		}
 		titleSeen[title] = true
+		urlSeen[link] = true
+		sources[sourceLabel(i)]++
 		out = append(out, i)
 		keys = append(keys, key)
 		if len(out) >= limit {
@@ -166,12 +195,12 @@ func (a *App) items(kind string, rows []Item, limit int, now time.Time, age time
 func itemEmbed(title string, items []Item, color, budget int) Embed {
 	e := Embed{Title: title, Color: color}
 	for n, i := range items {
-		name := fmt.Sprintf("%d. %s", n+1, short(safeText(i.Title), 100))
-		link := "[อ่านต่อ ↗](" + i.URL + ") · " + short(safeText(i.Source), 60)
+		name := fmt.Sprintf("%02d  %s", n+1, short(safeText(i.Title), 170))
+		link := "[" + safeText(sourceLabel(i)) + " ↗](" + i.URL + ")"
 		remaining := min(1024, budget/len(items)-len([]rune(name))) - len([]rune(link)) - 1
 		value := link
-		if i.Summary != "" && remaining > 20 {
-			value = short(safeText(i.Summary), min(100, remaining)) + "\n" + link
+		if summary := digestSummary(i, min(240, remaining)); summary != "" && remaining > 20 {
+			value = safeText(summary) + "\n" + link
 		}
 		e.Fields = append(e.Fields, EmbedField{Name: name, Value: value})
 	}
@@ -203,15 +232,27 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 		}
 	}
 	if c.News {
-		rows, keys := a.items("news", s.News, 3, now, 36*time.Hour)
+		rows, keys := a.items("news", s.News, 4, now, 36*time.Hour)
 		if len(rows) > 0 {
-			add(c.NewsWebhook, itemEmbed("📰 ข่าวที่คัดมา · "+day, rows, 0x5865F2, 1100), keys)
+			for n, row := range rows {
+				_, topic := newsTopic(row, c.AreaKeywords)
+				e := Embed{Title: short(safeText(row.Title), 200), URL: row.URL, Color: 0x5865F2,
+					Description: safeText(digestSummary(row, 280)),
+					Fields:      []EmbedField{{Name: fmt.Sprintf("%02d · %s", n+1, topic), Value: "[" + safeText(sourceLabel(row)) + " ↗](" + row.URL + ") · " + row.Published.In(c.Location).Format("02/01 15:04")}}}
+				if row.ImageURL != "" {
+					e.Thumbnail = &EmbedMedia{URL: row.ImageURL}
+				}
+				add(c.NewsWebhook, e, []string{keys[n]})
+			}
 		}
 	}
 	if c.Games {
 		rows, keys := a.items("games", s.Games, 3, now, 0)
 		if len(rows) > 0 {
 			e := itemEmbed("🎁 เกมเต็มแจกฟรี", rows, 0x57F287, 1050)
+			if rows[0].ImageURL != "" {
+				e.Thumbnail = &EmbedMedia{URL: rows[0].ImageURL}
+			}
 			e.Description += "\n\nข้อมูลจาก [GamerPower](https://www.gamerpower.com/) · ตรวจเงื่อนไข/ภูมิภาคก่อนรับ"
 			add(c.GamesWebhook, e, keys)
 		}
@@ -239,9 +280,15 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 				if len(s.Water) == 0 {
 					message = "ไม่พบข้อมูลสถานีที่ใหม่พอในพื้นที่นี้ ไม่ได้หมายความว่าไม่มีน้ำท่วม"
 				}
-				e.Fields = append([]EmbedField{{Name: "ข้อมูลในพื้นที่ที่ตั้งไว้", Value: message}}, e.Fields...)
+				field := EmbedField{Name: "🌊 น้ำใกล้คุณ", Value: message + " · [ThaiWater ↗](https://www.thaiwater.net/water/wl)"}
+				if p := groups[c.AlertsWebhook]; p != nil && len(p.Embeds) > 0 {
+					p.Embeds[0].Fields = append(p.Embeds[0].Fields, field)
+				} else {
+					add(c.AlertsWebhook, Embed{Title: "📍 สถานะในพื้นที่", Color: 0x99AAB5, Fields: []EmbedField{field}}, nil)
+				}
+			} else {
+				add(c.AlertsWebhook, e, nil)
 			}
-			add(c.AlertsWebhook, e, nil)
 			p := groups[c.AlertsWebhook]
 			p.Ack = func() { a.ackWater(stations, now) }
 		}

@@ -17,6 +17,7 @@ import (
 
 type Item struct {
 	ID, Title, Summary, URL, Source string
+	ImageURL                        string
 	Published, Expires              time.Time
 }
 
@@ -104,7 +105,7 @@ func parseFeed(data []byte) (string, []Item, []FeedItem, error) {
 			if link == "" {
 				continue
 			}
-			out = append(out, Item{ID: normalizedURL(link), Title: text(r.Title), Summary: text(r.Description), URL: link, Source: root.Channel.Title, Published: parseTime(r.Date)})
+			out = append(out, Item{ID: normalizedURL(link), Title: text(r.Title), Summary: text(r.Description), URL: link, Source: root.Channel.Title, Published: parseTime(r.Date), ImageURL: feedThumbnail(r.Description)})
 		}
 		return root.Channel.Title, out, root.Channel.Items, nil
 	}
@@ -235,6 +236,7 @@ func fetchGames(ctx context.Context, client *http.Client, c Config) ([]Item, err
 		Status      string `json:"status"`
 		Platforms   string `json:"platforms"`
 		End         string `json:"end_date"`
+		Thumbnail   string `json:"thumbnail"`
 	}
 	if json.Unmarshal(data, &rows) != nil {
 		return nil, fmt.Errorf("invalid GamerPower response")
@@ -266,8 +268,7 @@ func fetchGames(ctx context.Context, client *http.Client, c Config) ([]Item, err
 		if r.End != "" && r.End != "N/A" {
 			summary += " · หมดเขต: " + strings.Split(r.End, " ")[0] + " (ตามต้นทาง)"
 		}
-		summary += " · " + short(text(r.Description), 80)
-		out = append(out, Item{ID: strconv.Itoa(r.ID), Title: r.Title, Summary: summary, URL: link, Source: "GamerPower"})
+		out = append(out, Item{ID: strconv.Itoa(r.ID), Title: r.Title, Summary: summary, URL: link, Source: "GamerPower", ImageURL: safeURL(r.Thumbnail)})
 	}
 	return out, nil
 }
