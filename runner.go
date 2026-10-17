@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"log"
 	"net/http"
 	"os"
@@ -29,6 +30,7 @@ type App struct {
 	client       *http.Client
 	state        *State
 	dry          bool
+	previewDir   string
 	lastPoll     time.Time
 	lastDigest   time.Time
 	lastSnapshot Snapshot
@@ -211,6 +213,7 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 	day := now.In(c.Location).Format("2006-01-02")
 	groups := map[string]*Plan{}
 	add := func(hook string, e Embed, keys []string) {
+		e.Visual = true
 		if e.Description == "" && len(e.Fields) == 0 {
 			return
 		}
@@ -235,6 +238,9 @@ func (a *App) daily(ctx context.Context, s Snapshot, now time.Time) []Plan {
 		rows, keys := a.items("news", s.News, 4, now, 36*time.Hour)
 		if len(rows) > 0 {
 			for n, row := range rows {
+				if row.ImageURL == "" {
+					row.ImageURL = articleArtworkURL(ctx, row.URL)
+				}
 				_, topic := newsTopic(row, c.AreaKeywords)
 				e := Embed{Title: short(safeText(row.Title), 200), URL: row.URL, Color: 0x5865F2,
 					Description: safeText(digestSummary(row, 280)),
@@ -388,10 +394,31 @@ func (a *App) deliver(ctx context.Context, p Plan, now time.Time) error {
 	if a.dry {
 		data, _ := json.MarshalIndent(p.Embeds, "", "  ")
 		log.Printf("PREVIEW %s\n%s", p.ID, data)
+		if a.previewDir != "" {
+			if err := os.MkdirAll(a.previewDir, 0700); err != nil {
+				return err
+			}
+			for n, e := range p.Embeds {
+				var artwork image.Image
+				if e.Thumbnail != nil {
+					artwork = cardArtwork(ctx, e.Thumbnail.URL)
+				}
+				b, err := renderCard(e, artwork)
+				if err != nil {
+					return err
+				}
+				if err = os.WriteFile(filepath.Join(a.previewDir, fmt.Sprintf("%s-%d.png", hash(p.ID), n+1)), b, 0600); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	}
 	if p.Alert && a.state.AlertCount >= a.cfg.MaxAlerts {
 		return nil
+	}
+	for n := range p.Embeds {
+		p.Embeds[n].Visual = true
 	}
 	a.state.Deliveries[p.ID] = Delivery{Status: "pending", At: now, Keys: p.Keys}
 	if p.Alert {

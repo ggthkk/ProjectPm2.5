@@ -16,7 +16,11 @@ import (
 func main() {
 	mode := flag.String("mode", "daemon", "daemon, once, check, or health")
 	dry := flag.Bool("dry-run", false, "preview without sending or changing state")
+	previewDir := flag.String("preview-dir", "", "save PNG cards during dry-run")
 	flag.Parse()
+	if *previewDir != "" && !*dry {
+		log.Fatal("preview-dir requires dry-run")
+	}
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		log.Fatal("cannot load .env")
 	}
@@ -40,6 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	app.previewDir = *previewDir
 	if *mode == "check" {
 		if err := app.check(ctx); err != nil {
 			log.Print(err)
